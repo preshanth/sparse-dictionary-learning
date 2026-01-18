@@ -1,0 +1,50 @@
+training:
+  # Optimization
+  optimizer:
+    type: "adam"  # "adam" or "adamw"
+    learning_rate: 1.0e-3
+    weight_decay: 1.0e-5
+    betas: [0.9, 0.999]
+  
+  # Learning rate schedule
+  lr_scheduler:
+    type: "reduce_on_plateau"  # "reduce_on_plateau", "cosine", or "none"
+    patience: 10  # epochs
+    factor: 0.5
+    min_lr: 1.0e-6
+  
+  # Loss function weights
+  loss:
+    reconstruction_weight: 1.0
+    sparsity_weight: 0.05  # λ for L1 penalty
+    diversity_weight: 0.01  # β for atom diversity (coherence penalty)
+  
+  # Training parameters
+  epochs: 100
+  batch_size: 32
+  gradient_clip: 1.0  # max gradient norm
+  early_stopping_patience: 20
+  
+  # Hardware
+  device: "cuda"  # "cuda" or "cpu"
+  mixed_precision: true  # use automatic mixed precision (fp16)
+  num_workers: 4  # data loader threads (set to 0 if issues)
+  pin_memory: true
+  
+  # Checkpointing
+  checkpoint_dir: "./checkpoints"
+  save_every_n_epochs: 5
+  save_best_only: true  # also keep best validation loss model
+  keep_last_n: 3  # keep last N checkpoints
+  
+  # Logging
+  log_dir: "./logs"
+  log_every_n_steps: 50
+  validate_every_n_epochs: 1
+  
+  # Visualization during training
+  visualize:
+    enabled: true
+    every_n_epochs: 5
+    num_reconstructions: 8  # show N example reconstructions
+    num_atoms: 64  # show N dictionary atoms (up to dict_size)

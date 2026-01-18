@@ -1,0 +1,44 @@
+model:
+  name: "sparse_autoencoder"
+  
+  # Dictionary size
+  dictionary_size: 256  # K atoms
+  
+  # Encoder architecture
+  encoder:
+    type: "production"  # "simple" or "production"
+    
+    # Simple encoder params
+    simple:
+      channels: [16, 32, 64]  # conv channel progression
+      kernel_sizes: [5, 3, 3]
+      activation: "relu"
+      use_batch_norm: true
+      dropout: 0.1
+    
+    # Production encoder params (residual)
+    production:
+      initial_channels: 32
+      channel_progression: [32, 64, 128]  # channels per residual stage
+      blocks_per_stage: 2  # residual blocks per stage
+      activation: "relu"
+      use_batch_norm: true
+      dropout: 0.2
+  
+  # Sparse coding layer
+  sparsity:
+    method: "learned_threshold"  # "learned_threshold" or "l1_penalty"
+    
+    # Learned threshold params
+    learned_threshold:
+      initial_threshold: 0.1
+      learnable: true  # allow threshold to adapt during training
+    
+    # L1 penalty params (if method="l1_penalty")
+    l1_penalty:
+      weight: 0.01
+  
+  # Decoder (dictionary-based)
+  decoder:
+    normalize_atoms: true  # project dictionary to unit norm
+    init_method: "orthogonal"  # "orthogonal", "normal", or "uniform"

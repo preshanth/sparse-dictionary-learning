@@ -1,0 +1,33 @@
+data:
+  # Paths
+  manifest_path: "./data/manifest.json"
+  cache_dir: "./data/cache"
+  
+  # Cutout parameters
+  cutout_size: 64  # pixels (square cutouts)
+  padding_fraction: 0.2  # pad source islands by 20%
+  
+  # Source filtering
+  filters:
+    min_snr: 5.0  # minimum peak SNR
+    max_angular_size: 100.0  # arcsec (exclude giant sources for 64x64)
+    min_angular_size: 5.0  # arcsec (exclude unresolved noise)
+    exclude_edge_sources: true  # exclude sources near image edges
+    
+  # Normalization
+  normalization: "integrated_flux"  # "integrated_flux", "peak_flux", or "none"
+  log_scale: false  # apply log10(1 + flux) transformation
+  clip_percentiles: [1, 99]  # clip extreme values
+  
+  # Data splits
+  train_fraction: 0.7
+  val_fraction: 0.2
+  test_fraction: 0.1
+  random_seed: 42
+  
+  # Augmentation (applied during training only)
+  augmentation:
+    random_rotation: true  # rotate 0-360 degrees
+    random_flip: true  # horizontal/vertical flips
+    add_noise: false  # add Gaussian noise (for robustness)
+    noise_std: 0.01

@@ -1,0 +1,31 @@
+[project]
+name = "first-sparse-dict"
+version = "0.1.0"
+description = "Sparse dictionary learning for FIRST radio sources"
+requires-python = ">=3.9"
+dependencies = [
+    "torch>=2.0.0",
+    "torchvision>=0.15.0",
+    "astropy>=5.0",
+    "numpy>=1.24",
+    "matplotlib>=3.7",
+    "pyyaml>=6.0",
+    "tqdm>=4.65",
+    "requests>=2.31",
+]
+
+[project.optional-dependencies]
+pybdsf = [
+    "bdsf>=1.10.0",
+]
+dev = [
+    "pytest>=7.0",
+    "jupyter>=1.0",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
