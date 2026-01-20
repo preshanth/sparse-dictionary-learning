@@ -83,10 +83,18 @@ def build_manifest_from_catalog(
                 min_flux=1.0,
                 min_snr=min_snr
             )
-            # Filter by angular size
+            # Filter by angular size and reject point-like sources
             for src in image_sources:
                 major = src.get('major', 0)
-                
+                peak = src.get('peak', 0)
+                flux = src.get('flux', 0)
+
+                # Reject point-like sources (peak/integrated ratio > 0.8)
+                if flux > 0:
+                    peak_to_int = peak / flux
+                    if peak_to_int > 0.8:
+                        continue
+
                 if min_angular_size <= major <= max_angular_size:
                     sources.append({
                         'source_id': f"FIRST_{source_id:06d}",
@@ -112,57 +120,60 @@ def build_manifest_from_catalog(
 def build_manifest_from_pybdsf(
     fits_dir: Path,
     cutout_size: int,
-    min_snr: float
+    min_snr: float,
+    min_angular_size: float = 5.0,
+    max_angular_size: float = 100.0
 ) -> List[Dict]:
     """Build manifest using PyBDSF for source detection"""
-    
+
     try:
         import bdsf
     except ImportError:
         raise ImportError(
             "PyBDSF not installed. Install with: pip install -e .[pybdsf]"
         )
-    
+
     print("\nScanning FITS files...")
     fits_files = find_fits_files(fits_dir)
     print(f"Found {len(fits_files)} FITS files")
-    
+
     sources = []
     source_id = 0
-    
+
     for fits_path in tqdm(fits_files, desc="Running PyBDSF"):
         try:
-            # Run PyBDSF source finding
             img = bdsf.process_image(
                 str(fits_path),
                 thresh_isl=3.0,
                 thresh_pix=5.0,
                 quiet=True
             )
-            
-            # Get source catalog
-            catalog = img.sources
-            
-            for src in catalog:
-                if src['Peak_flux'] / src['Isl_rms'] >= min_snr:
+
+            for src in img.sources:
+                # PyBDSF uses attributes, not dict keys
+                snr = src.peak_flux_max / src.rms_isl
+                major_arcsec = src.size_sky[0] * 3600  # deg to arcsec
+                minor_arcsec = src.size_sky[1] * 3600
+
+                if snr >= min_snr and min_angular_size <= major_arcsec <= max_angular_size:
                     sources.append({
                         'source_id': f"FIRST_{source_id:06d}",
                         'fits_path': str(fits_path),
-                        'ra': src['RA'],
-                        'dec': src['DEC'],
+                        'ra': float(src.posn_sky[0]),
+                        'dec': float(src.posn_sky[1]),
                         'cutout_size': cutout_size,
-                        'integrated_flux': src['Total_flux'] * 1000,  # Jy to mJy
-                        'peak_flux': src['Peak_flux'] * 1000,
-                        'rms': src['Isl_rms'] * 1000,
-                        'major': src['Maj'] * 3600,  # deg to arcsec
-                        'minor': src['Min'] * 3600,
+                        'integrated_flux': float(src.total_flux) * 1000,
+                        'peak_flux': float(src.peak_flux_max) * 1000,
+                        'rms': float(src.rms_isl) * 1000,
+                        'major': major_arcsec,
+                        'minor': minor_arcsec,
                     })
                     source_id += 1
-        
+
         except Exception as e:
             print(f"Error processing {fits_path}: {e}")
             continue
-    
+
     return sources
 
 
@@ -288,7 +299,9 @@ def main():
         sources = build_manifest_from_pybdsf(
             fits_dir,
             args.cutout_size,
-            args.min_snr
+            args.min_snr,
+            args.min_angular_size,
+            args.max_angular_size
         )
     else:
         if args.catalog is None:

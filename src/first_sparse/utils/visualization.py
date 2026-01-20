@@ -5,7 +5,6 @@ from typing import Optional, List
 
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
 import torch
 
 
@@ -213,9 +212,49 @@ def plot_atom_usage_histogram(
            fontsize=10)
     
     plt.tight_layout()
-    
+
     if save_path:
         plt.savefig(save_path, dpi=150, bbox_inches='tight')
         print(f"Saved atom usage histogram to {save_path}")
-    
+
     return fig
+
+
+def save_atoms_by_usage(
+    atoms: torch.Tensor,
+    usage: np.ndarray,
+    output_dir: str,
+    usage_threshold: float = 0.01
+):
+    """Save active and dead atoms to separate files
+
+    Args:
+        atoms: (K, 1, H, W) dictionary atoms
+        usage: (K,) usage fraction per atom
+        output_dir: Directory to save plots
+        usage_threshold: Atoms with usage < threshold are "dead"
+    """
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    active_mask = usage >= usage_threshold
+    active_idx = np.where(active_mask)[0]
+    dead_idx = np.where(~active_mask)[0]
+
+    # Plot active atoms
+    if len(active_idx) > 0:
+        plot_dictionary_atoms(
+            atoms[active_idx],
+            n_atoms=len(active_idx),
+            save_path=str(output_dir / "atoms_active.png"),
+            title=f"Active Atoms ({len(active_idx)})"
+        )
+
+    # Plot dead atoms
+    if len(dead_idx) > 0:
+        plot_dictionary_atoms(
+            atoms[dead_idx],
+            n_atoms=len(dead_idx),
+            save_path=str(output_dir / "atoms_dead.png"),
+            title=f"Dead Atoms ({len(dead_idx)})"
+        )

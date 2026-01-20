@@ -129,3 +129,39 @@ first-sparse-dict/
 **FITS files not found:**
 - Verify `--fits-dir` path in build_manifest.py
 - Check that .fits files exist in subdirectories
+
+## Convolutional Sparse Coding (Recommended)
+
+An alternative approach using small convolutional atoms that generalize across source types.
+
+### Train on CRUMB Dataset
+
+```bash
+# Train with 16 atoms of size 11x11
+python scripts/train_crumb.py --n-atoms 16 --atom-size 11 --epochs 100
+
+# Resume training
+python scripts/train_crumb.py --resume ./results/crumb_conv_sparse/best_model.pt --epochs 200
+
+# Use pretrained atoms, train everything
+python scripts/train_crumb.py --pretrained-atoms ./results/crumb_conv_sparse/best_model.pt
+
+# Freeze atoms, only train encoder
+python scripts/train_crumb.py --pretrained-atoms ./results/crumb_conv_sparse/best_model.pt --freeze-atoms
+```
+
+### Test on Held-out Data
+
+```bash
+python scripts/test_crumb.py --checkpoint ./results/crumb_conv_sparse/best_model.pt
+```
+
+### Test on Arbitrary Images
+
+Works on any FITS or PNG/JPG image:
+
+```bash
+python scripts/test_arbitrary.py --image /path/to/image.fits --checkpoint ./results/crumb_conv_sparse/best_model.pt
+```
+
+The convolutional atoms learn generic local structure (edges, gradients, shells) that transfer across source types - tested successfully on supernova remnants despite training only on radio galaxies.

@@ -96,3 +96,89 @@ class DictionaryDecoder(nn.Module):
         """Call this after each optimizer step to maintain unit norm"""
         if self.normalize_atoms:
             self._normalize_atoms()
+
+
+class ConvDictionaryDecoder(nn.Module):
+    """Convolutional dictionary decoder: spatial sparse codes -> reconstructed image
+
+    Uses small convolutional atoms instead of full image-sized atoms.
+    Reconstruction is sum of convolutions: x = sum_k (atom_k * codes_k)
+    """
+
+    def __init__(
+        self,
+        n_atoms: int,
+        atom_size: int = 11,
+        normalize_atoms: bool = True,
+        init_method: str = 'normal'
+    ):
+        """
+        Args:
+            n_atoms: Number of dictionary atoms K
+            atom_size: Size of each atom (assumed square, should be odd)
+            normalize_atoms: Project dictionary atoms to unit norm
+            init_method: 'normal' or 'uniform'
+        """
+        super().__init__()
+
+        self.n_atoms = n_atoms
+        self.atom_size = atom_size
+        self.normalize_atoms = normalize_atoms
+        self.padding = atom_size // 2
+
+        # Dictionary atoms as conv weights: (n_atoms, 1, atom_size, atom_size)
+        # Using transposed conv: sparse_codes (B, n_atoms, H, W) -> image (B, 1, H, W)
+        self.atoms = nn.ConvTranspose2d(
+            in_channels=n_atoms,
+            out_channels=1,
+            kernel_size=atom_size,
+            padding=self.padding,
+            bias=False
+        )
+
+        self._initialize_atoms(init_method)
+
+        if normalize_atoms:
+            self._normalize_atoms()
+
+    def _initialize_atoms(self, method: str):
+        """Initialize atom weights"""
+        if method == 'normal':
+            nn.init.normal_(self.atoms.weight, mean=0, std=0.1)
+        elif method == 'uniform':
+            nn.init.uniform_(self.atoms.weight, -0.1, 0.1)
+        else:
+            raise ValueError(f"Unknown init method: {method}")
+
+    def _normalize_atoms(self):
+        """Project each atom to unit L2 norm"""
+        with torch.no_grad():
+            # atoms.weight shape: (n_atoms, 1, atom_size, atom_size)
+            weight = self.atoms.weight
+            norms = weight.view(self.n_atoms, -1).norm(dim=1, keepdim=True)
+            norms = norms.view(self.n_atoms, 1, 1, 1)
+            self.atoms.weight.div_(norms + 1e-8)
+
+    def forward(self, codes):
+        """Reconstruct image from spatial sparse codes
+
+        Args:
+            codes: (batch, n_atoms, H, W) spatial sparse activations
+
+        Returns:
+            images: (batch, 1, H, W) reconstructed images
+        """
+        return self.atoms(codes)
+
+    def get_atoms(self) -> torch.Tensor:
+        """Get dictionary atoms as images
+
+        Returns:
+            atoms: (n_atoms, 1, atom_size, atom_size) dictionary atoms
+        """
+        return self.atoms.weight.detach()
+
+    def normalize_atoms_during_training(self):
+        """Call this after each optimizer step to maintain unit norm"""
+        if self.normalize_atoms:
+            self._normalize_atoms()

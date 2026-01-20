@@ -2,7 +2,7 @@ model:
   name: "sparse_autoencoder"
   
   # Dictionary size
-  dictionary_size: 256  # K atoms
+  dictionary_size: 64  # K atoms
   
   # Encoder architecture
   encoder:

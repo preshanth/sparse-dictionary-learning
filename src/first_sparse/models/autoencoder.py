@@ -3,8 +3,8 @@
 import torch
 import torch.nn as nn
 
-from .encoder import create_encoder, LearnedThreshold
-from .decoder import DictionaryDecoder
+from .encoder import create_encoder, LearnedThreshold, ConvSparseEncoder, SpatialSoftThreshold
+from .decoder import DictionaryDecoder, ConvDictionaryDecoder
 
 
 class SparseAutoencoder(nn.Module):
@@ -147,6 +147,134 @@ class SparseAutoencoder(nn.Module):
             # Per-atom usage (how often each atom is active)
             atom_usage = (codes.abs() > 1e-6).float().mean(dim=0)
             
+        return {
+            'l0_norm': l0,
+            'l1_norm': l1,
+            'active_percent': active_percent,
+            'min_atom_usage': atom_usage.min().item(),
+            'max_atom_usage': atom_usage.max().item(),
+            'mean_atom_usage': atom_usage.mean().item()
+        }
+
+
+class ConvSparseAutoencoder(nn.Module):
+    """Convolutional sparse autoencoder with small dictionary atoms
+
+    Uses spatial sparse codes and convolutional dictionary.
+    """
+
+    def __init__(self, config: dict):
+        """
+        Args:
+            config: Model configuration dictionary with keys:
+                - n_atoms: Number of dictionary atoms
+                - atom_size: Size of each atom (e.g., 11)
+                - encoder: Encoder configuration
+                - sparsity: Sparsity configuration
+                - decoder: Decoder configuration
+        """
+        super().__init__()
+
+        self.config = config
+        self.n_atoms = config.get('n_atoms', 16)
+        self.atom_size = config.get('atom_size', 11)
+
+        # Build encoder
+        encoder_config = config.get('encoder', {}).copy()
+        encoder_config['n_atoms'] = self.n_atoms
+        self.encoder = ConvSparseEncoder(**encoder_config)
+
+        # Build sparsity layer
+        sparsity_config = config.get('sparsity', {})
+        initial_threshold = sparsity_config.get('initial_threshold', 0.1)
+        learnable = sparsity_config.get('learnable', True)
+        self.sparsity = SpatialSoftThreshold(
+            n_atoms=self.n_atoms,
+            initial_threshold=initial_threshold,
+            learnable=learnable
+        )
+
+        # Build decoder
+        decoder_config = config.get('decoder', {})
+        self.decoder = ConvDictionaryDecoder(
+            n_atoms=self.n_atoms,
+            atom_size=self.atom_size,
+            normalize_atoms=decoder_config.get('normalize_atoms', True),
+            init_method=decoder_config.get('init_method', 'normal')
+        )
+
+    def forward(self, x, return_codes=False):
+        """Forward pass
+
+        Args:
+            x: Input images (batch, 1, H, W)
+            return_codes: If True, return both reconstruction and codes
+
+        Returns:
+            If return_codes=False: reconstructed images (batch, 1, H, W)
+            If return_codes=True: (reconstructed images, sparse codes)
+        """
+        # Encode to spatial codes
+        codes = self.encoder(x)
+
+        # Apply sparsity
+        sparse_codes = self.sparsity(codes)
+
+        # Decode
+        reconstruction = self.decoder(sparse_codes)
+
+        if return_codes:
+            return reconstruction, sparse_codes
+        else:
+            return reconstruction
+
+    def encode(self, x):
+        """Encode images to spatial sparse codes"""
+        codes = self.encoder(x)
+        return self.sparsity(codes)
+
+    def decode(self, codes):
+        """Decode spatial sparse codes to images"""
+        return self.decoder(codes)
+
+    def get_dictionary(self):
+        """Get dictionary atoms
+
+        Returns:
+            atoms: (n_atoms, 1, atom_size, atom_size) tensor of atoms
+        """
+        return self.decoder.get_atoms()
+
+    def normalize_dictionary(self):
+        """Normalize dictionary atoms (call after optimizer step)"""
+        self.decoder.normalize_atoms_during_training()
+
+    def compute_sparsity_stats(self, codes):
+        """Compute sparsity statistics for spatial codes
+
+        Args:
+            codes: (batch, n_atoms, H, W) spatial sparse codes
+
+        Returns:
+            dict with sparsity metrics
+        """
+        with torch.no_grad():
+            # Flatten spatial dimensions
+            batch_size = codes.size(0)
+            codes_flat = codes.view(batch_size, self.n_atoms, -1)
+
+            # L0 norm per image (number of non-zero activations)
+            l0 = (codes_flat.abs() > 1e-6).float().sum(dim=(1, 2)).mean().item()
+
+            # L1 norm
+            l1 = codes_flat.abs().sum(dim=(1, 2)).mean().item()
+
+            # Percentage of active codes
+            active_percent = (codes_flat.abs() > 1e-6).float().mean().item() * 100
+
+            # Per-atom usage (how often each atom is active anywhere)
+            atom_usage = (codes.abs() > 1e-6).float().mean(dim=(0, 2, 3))
+
         return {
             'l0_norm': l0,
             'l1_norm': l1,
